@@ -59,18 +59,14 @@ static int empty_directory(const char *path) {
 
 int
 __removefile_rename_unlink(const char *path, removefile_state_t state) {
-  char *new_name, *p, c;
+  char *p, c;
   struct stat statbuf;
 
   size_t new_name_size = strlen(path) + 15;
+  char new_name[new_name_size];
   int i = 0;
   
-  if ( (new_name = (char *)alloca(new_name_size)) == NULL ) {
-	errno = ENOMEM;
-    return -1;
-  }
-
-  strncpy(new_name, path, new_name_size);
+  strlcpy(new_name, path, new_name_size);
 
   if ( (p = strrchr(new_name, '/')) != NULL ) {
     p++;
@@ -105,7 +101,9 @@ __removefile_rename_unlink(const char *path, removefile_state_t state) {
   if (rename(path, new_name) == -1)
     return -1;
 
-  sync();
+  if ((state->unlink_flags & REMOVEFILE_RECURSIVE) == 0) {
+    sync_volume_np(new_name, 0);
+  }
 
   if (lstat(new_name, &statbuf) == -1) {
 	errno = ENOENT;

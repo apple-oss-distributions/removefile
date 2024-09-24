@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <fts.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -42,21 +43,33 @@ static void stop_timer(void) {
 
 static int removefile_confirm_callback(removefile_state_t state, const char * path, void * context) {
 	assert(context == (void*)1234);
+
+	FTSENT *entry;
+	assert(removefile_state_get(state, REMOVEFILE_STATE_FTSENT, &entry) == 0);
+	assert(entry->fts_statp);
 	fprintf(stderr, "confirm callback: %s\n", path);
 	return REMOVEFILE_PROCEED;
 }
 
 static int removefile_error_callback(removefile_state_t state, const char * path, void * context) {
 	assert(context == (void*)4567);
+
+	FTSENT *entry;
 	int err = 0;
 	assert(removefile_state_get(state, REMOVEFILE_STATE_ERRNO, &err) == 0);
+	assert(removefile_state_get(state, REMOVEFILE_STATE_FTSENT, &entry) == 0);
+	assert(entry->fts_statp);
 	fprintf(stderr, "error callback: %s: %s (%d)\n", path, strerror(err), err);
 	return REMOVEFILE_PROCEED;
 }
 
 static int removefile_status_callback(removefile_state_t state, const char * path, void * context) {
-   fprintf(stderr, "status callback: %s\n", path);
-   return REMOVEFILE_PROCEED;
+	FTSENT *entry;
+	assert(removefile_state_get(state, REMOVEFILE_STATE_FTSENT, &entry) == 0);
+	assert(entry->fts_statp);
+
+	fprintf(stderr, "status callback: %s\n", path);
+	return REMOVEFILE_PROCEED;
 }
 
 static void mklargedir(void) {
@@ -70,6 +83,7 @@ static void mklargedir(void) {
 	total_len += sizeof(test_top_dir);
 	assert(chdir(test_top_dir) == 0);
 	memset_pattern8(large_dir_buf, "cutiepie", NAME_MAX);
+	large_dir_buf[NAME_MAX - 1] = 0;
 
 	// repeatedly create directories so that the total path
 	// of the depest directory is > PATH_MAX.
@@ -116,6 +130,9 @@ void* threadproc(void* state) {
 	return NULL;
 }
 
+//
+// With no arguments, this is our main automated test suite for removefile.
+//
 int main(int argc, char *argv[]) {
 	removefile_state_t state = NULL;
 	removefile_callback_t callback = NULL;
